@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # Main application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - LLM_SERVICE_URL=http://llm-service:8000
+    depends_on:
+      - mysql
+      - llm-service
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # LLM Microservice
+  llm-service:
+    build:
+      context: ./llm-service
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+      - DEFAULT_MODEL=gemini-2.0-flash-lite
+      - PORT=8000
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # n8n Automation
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-admin}
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678}
+      - LLM_SERVICE_URL=http://llm-service:8000
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/backup
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-workflow_automation}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - app-network
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+
+volumes:
+  n8n_data:
+  mysql_data:
+
+networks:
+  app-network:
+    driver: bridge

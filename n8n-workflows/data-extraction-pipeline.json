@@ -1,0 +1,111 @@
+{
+  "name": "Data Extraction Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "extract-trigger",
+      "name": "Extraction Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "data-extract"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://llm-service:8000/extract",
+        "body": {
+          "text": "={{ $json.body.text }}",
+          "fields": "={{ $json.body.fields || ['name', 'email', 'phone', 'company'] }}"
+        },
+        "options": {}
+      },
+      "id": "extract-node",
+      "name": "LLM Extract",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.body.success }}",
+              "rightValue": "=true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-success",
+      "name": "Extract Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_WEBHOOK_URL/store-results",
+        "body": {
+          "workflowId": "={{ $json.body.data.workflow_id }}",
+          "extractedData": "={{ JSON.stringify($json.body.data.extracted) }}",
+          "confidence": "={{ $json.body.data.confidence }}",
+          "tokensUsed": "={{ $json.body.tokens_used }}",
+          "processingTime": "={{ $json.body.processing_time_ms }}"
+        }
+      },
+      "id": "store-results",
+      "name": "Store Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 250]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_WEBHOOK_URL/error-handler",
+        "body": {
+          "error": "={{ $json.body.error || 'Extraction failed' }}",
+          "rawInput": "={{ $('Extraction Webhook').item.json.body.text }}",
+          "timestamp": "={{ $now }}"
+        }
+      },
+      "id": "error-handler",
+      "name": "Handle Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 400]
+    }
+  ],
+  "connections": {
+    "Extraction Webhook": {
+      "main": [[{"node": "LLM Extract", "type": "main", "index": 0}]]
+    },
+    "LLM Extract": {
+      "main": [[{"node": "Extract Success?", "type": "main", "index": 0}]]
+    },
+    "Extract Success?": {
+      "main": [
+        [{"node": "Store Results", "type": "main", "index": 0}],
+        [{"node": "Handle Error", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": []
+}

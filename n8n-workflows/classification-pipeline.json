@@ -1,0 +1,111 @@
+{
+  "name": "Auto Classification Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-node",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "auto-classify"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://llm-service:8000/classify",
+        "body": {
+          "text": "={{ $json.body.text }}",
+          "categories": "={{ $json.body.categories || ['urgent', 'normal', 'low-priority'] }}"
+        },
+        "options": {}
+      },
+      "id": "classify-node",
+      "name": "LLM Classify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.body.data.category }}",
+              "rightValue": "urgent",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-urgent",
+      "name": "Is Urgent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_WEBHOOK_URL/urgent-alerts",
+        "body": {
+          "category": "={{ $json.body.data.category }}",
+          "confidence": "={{ $json.body.data.confidence }}",
+          "text": "={{ $('Webhook Trigger').item.json.body.text }}",
+          "timestamp": "={{ $now }}"
+        }
+      },
+      "id": "urgent-route",
+      "name": "Route Urgent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 150]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_WEBHOOK_URL/normal-queue",
+        "body": {
+          "category": "={{ $json.body.data.category }}",
+          "confidence": "={{ $json.body.data.confidence }}",
+          "text": "={{ $('Webhook Trigger').item.json.body.text }}",
+          "timestamp": "={{ $now }}"
+        }
+      },
+      "id": "normal-route",
+      "name": "Route Normal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 350]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{"node": "LLM Classify", "type": "main", "index": 0}]]
+    },
+    "LLM Classify": {
+      "main": [[{"node": "Is Urgent?", "type": "main", "index": 0}]]
+    },
+    "Is Urgent?": {
+      "main": [
+        [{"node": "Route Urgent", "type": "main", "index": 0}],
+        [{"node": "Route Normal", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": []
+}

@@ -1,0 +1,124 @@
+{
+  "name": "Smart Routing Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "route-trigger",
+      "name": "Routing Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "smart-route"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://llm-service:8000/route",
+        "body": {
+          "text": "={{ $json.body.text }}",
+          "routes": "={{ $json.body.routes || {\"support\": \"Customer support inquiries\", \"sales\": \"Sales questions\", \"technical\": \"Technical issues\"} }}"
+        },
+        "options": {}
+      },
+      "id": "route-node",
+      "name": "LLM Route",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "switch-node",
+      "name": "Route Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "rules": {
+        "rules": [
+          {
+            "value": "support",
+            "output": 0
+          },
+          {
+            "value": "sales",
+            "output": 1
+          },
+          {
+            "value": "technical",
+            "output": 2
+          }
+        ]
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_SUPPORT_ENDPOINT",
+        "body": {
+          "route": "support",
+          "data": "={{ JSON.stringify($json.body.data) }}",
+          "originalText": "={{ $('Routing Webhook').item.json.body.text }}"
+        }
+      },
+      "id": "support-endpoint",
+      "name": "Send to Support",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 150]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_SALES_ENDPOINT",
+        "body": {
+          "route": "sales",
+          "data": "={{ JSON.stringify($json.body.data) }}",
+          "originalText": "={{ $('Routing Webhook').item.json.body.text }}"
+        }
+      },
+      "id": "sales-endpoint",
+      "name": "Send to Sales",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_TECH_ENDPOINT",
+        "body": {
+          "route": "technical",
+          "data": "={{ JSON.stringify($json.body.data) }}",
+          "originalText": "={{ $('Routing Webhook').item.json.body.text }}"
+        }
+      },
+      "id": "tech-endpoint",
+      "name": "Send to Tech",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 450]
+    }
+  ],
+  "connections": {
+    "Routing Webhook": {
+      "main": [[{"node": "LLM Route", "type": "main", "index": 0}]]
+    },
+    "LLM Route": {
+      "main": [[{"node": "Route Switch", "type": "main", "index": 0}]]
+    },
+    "Route Switch": {
+      "main": [
+        [{"node": "Send to Support", "type": "main", "index": 0}],
+        [{"node": "Send to Sales", "type": "main", "index": 0}],
+        [{"node": "Send to Tech", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": []
+}
